@@ -13,6 +13,8 @@ package comp3011;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Collections;
+import java.util.Map;
 
 /**
  * Created in the VideoPlayerApp's main function to receive and parse the video player's command-line arguments.
@@ -32,6 +34,19 @@ public class CommandLineController {
     private Integer displayId;
     private File videoFile;
     private String errorMessage;
+    
+    private static final Map<String, Character> OPTION_LONG_TO_SHORT = Map.of(
+            "--help", 'h',
+            "--audio", 'a',
+            "--maximise", 'x',
+            "--monitor-1", '1',
+            "--monitor-2", '2');
+
+    private final List<FrameProcessor> frameProcessors = new ArrayList<>();
+    
+    public List<FrameProcessor> getFrameProcessors() {
+        return Collections.unmodifiableList(frameProcessors);
+    }
 
     public CommandLineController(String[] args) {
         this.args = args.clone();
@@ -75,18 +90,10 @@ public class CommandLineController {
     private void parse() {
         List<String> videoFiles = new ArrayList<>();
         for (String arg : args) {
-            if ("-h".equals(arg) || "--help".equals(arg)) {
-                helpRequested = true;
-            } else if ("-a".equals(arg) || "--audio".equals(arg)) {
-                audioRequested = true;
-            } else if ("-x".equals(arg) || "--maximise".equals(arg)) {
-                maximiseRequested = true;
-            } else if ("-1".equals(arg) || "--monitor-1".equals(arg)) {
-                setDisplayId(1);
-            } else if ("-2".equals(arg) || "--monitor-2".equals(arg)) {
-                setDisplayId(2);
+            if (arg.startsWith("--")) {
+                parseLongOption(arg);
             } else if (arg.startsWith("-")) {
-                errorMessage = "Unknown option: " + arg;
+                parseShortOptions(arg);
             } else {
                 videoFiles.add(arg);
             }
@@ -106,7 +113,40 @@ public class CommandLineController {
             }
         }
     }
+    private void parseLongOption(String arg) {
+        Character baseFlag = OPTION_LONG_TO_SHORT.get(arg);
+        if (baseFlag != null) {
+            applyShortOption(baseFlag);
+            return;
+        }
+        FrameProcessorOption.fromLongFlag(arg).ifPresentOrElse(
+                option -> frameProcessors.add(option.create()),
+                () -> errorMessage = "Unknown option: " + arg);
+    }
 
+    // Handles single options ("-a") and stacked ones ("-jfddn"), left to right.
+    private void parseShortOptions(String arg) {
+        if (arg.length() == 1) {
+            errorMessage = "Unknown option: " + arg;
+            return;
+        }
+        for (char flag : arg.substring(1).toCharArray()) {
+            applyShortOption(flag);
+        }
+    }
+
+    private void applyShortOption(char flag) {
+        switch (flag) {
+            case 'h' -> helpRequested = true;
+            case 'a' -> audioRequested = true;
+            case 'x' -> maximiseRequested = true;
+            case '1' -> setDisplayId(1);
+            case '2' -> setDisplayId(2);
+            default -> FrameProcessorOption.fromShortFlag(flag).ifPresentOrElse(
+                    option -> frameProcessors.add(option.create()),
+                    () -> errorMessage = "Unknown option: -" + flag);
+        }
+    }
     private void setDisplayId(int displayId) {
         if (this.displayId != null && this.displayId != displayId) {
             errorMessage = "Only one display option can be used";
@@ -124,5 +164,12 @@ public class CommandLineController {
         System.out.println("  -x, --maximise     Open the player maximised");
         System.out.println("  -1, --monitor-1    Open the player on display 1");
         System.out.println("  -2, --monitor-2    Open the player on display 2");
+        System.out.println();
+        System.out.println("Frame processors:");
+        FrameProcessorOption.helpLines().forEach(System.out::println);
+        System.out.println();
+        System.out.println("Frame processors are applied in command-line order and may be repeated.");
+        System.out.println("Example: -nssnfwyvdjmbp numbers, scratches twice, numbers again, flickers,");
+        System.out.println("converts, warms, vignettes, dusts, jitters, mottles, bleeds, then peppers.");
     }
 }
