@@ -35,7 +35,7 @@ import javafx.scene.image.Image;
  */
 public class FramePipeline implements AutoCloseable {
     private static final int INPUT_QUEUE_CAPACITY = 8;
-    private static final int DISPLAY_QUEUE_CAPACITY = 16;
+    private static final int DISPLAY_QUEUE_CAPACITY = 400;
     private static final long JOIN_TIMEOUT_MS = 3_000;
 
     private final AtomicInteger generation = new AtomicInteger();
@@ -103,6 +103,9 @@ public class FramePipeline implements AutoCloseable {
     
     public int currentGeneration() {
         return generation.get();
+    }
+    public int displayQueueSize() {
+        return displayQueue.size();
     }
 
     /** Non-blocking. Only the JavaFX thread consumes, so peek then poll is safe. */

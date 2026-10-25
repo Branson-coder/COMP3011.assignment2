@@ -41,6 +41,7 @@ public class VideoPlayerModel {
     private static final long NO_SEEK_REQUEST = -1; // Sentinel value used when no seek position is active.
     private static final long FIVE_SECONDS_US = 5_000_000L;
     private static final long AUDIO_LEAD_NS = 30_000_000L;
+    private static final int PREBUFFER_FRAMES = 340;
 
     // Written by the decoder thread, read and cleared by the JavaFX thread.
     private final Queue<PendingAudio> pendingAudio = new ConcurrentLinkedQueue<>();
@@ -341,6 +342,11 @@ public class VideoPlayerModel {
             frame = pipeline.peekDisplayFrame();
         }
         if (frame == null) {
+            return;
+        }
+        if (awaitingFirstFrame
+                && !frame.isEndOfStream()
+                && pipeline.displayQueueSize() < PREBUFFER_FRAMES) {
             return;
         }
 
