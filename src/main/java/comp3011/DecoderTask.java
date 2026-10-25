@@ -35,6 +35,7 @@ public class DecoderTask implements Runnable {
     }
 
     private final FFmpegFrameGrabber grabber;
+    private long nextSequence; // decoder thread only
     private final boolean audioAvailable;
     private final BlockingQueue<PipelineFrame> output;
     private final FramePool framePool;
@@ -75,7 +76,7 @@ public class DecoderTask implements Runnable {
 
                 Frame frame = audioAvailable ? grabber.grab() : grabber.grabImage();
                 if (frame == null) {
-                    output.put(PipelineFrame.endOfStream(generation));
+                	output.put(PipelineFrame.endOfStream(generation, nextSequence++));
                     applySeeks(true); // keep the thread alive: the user may still seek back
                     continue;
                 }
@@ -92,7 +93,7 @@ public class DecoderTask implements Runnable {
                     initialised = true;
                 }
                 output.put(new PipelineFrame(
-                        generation, grabber.getFrameNumber(), timestampUs, framePool.copyOf(frame)));
+                        generation, nextSequence++, grabber.getFrameNumber(), timestampUs, framePool.copyOf(frame)));
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // normal shutdown

@@ -34,6 +34,9 @@ public class FrameScratcher extends FrameProcessor {
     private static final int SCRATCH_MAX_TRAVEL = 32;
 
     private static int nextInstanceIndex;
+    static void resetInstanceCounter() {
+        nextInstanceIndex = 0;
+    }
 
     private final int instanceIndex;
     private final List<Scratch> scratches = new ArrayList<>();

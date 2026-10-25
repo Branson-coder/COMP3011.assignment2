@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.ArrayList;
 
 /**
  * Registry of the command-line selectable frame processors. Each constant holds its
@@ -44,6 +45,15 @@ public enum FrameProcessorOption {
 
     public FrameProcessor create() {
         return factory.get();
+    }
+    /** Builds one independent chain of processors for the given options, in order. */
+    public static List<FrameProcessor> createChain(List<FrameProcessorOption> options) {
+        FrameProcessor.resetInstanceCounters();
+        List<FrameProcessor> chain = new ArrayList<>();
+        for (FrameProcessorOption option : options) {
+            chain.add(option.create());
+        }
+        return chain;
     }
 
     public static Optional<FrameProcessorOption> fromShortFlag(char flag) {

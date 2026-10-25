@@ -30,6 +30,9 @@ public class FrameJitterer extends FrameProcessor {
     private static final int SEED_SALT = 0x4a495454;
 
     private static int nextInstanceIndex;
+    static void resetInstanceCounter() {
+        nextInstanceIndex = 0;
+    }
 
     private final int instanceIndex;
     private int mediaSeed;

@@ -13,10 +13,10 @@ import org.bytedeco.javacv.Frame;
  * @param generation increments on every seek/restart so stale frames can be dropped
  * @param frame      the pixels, or null for the end-of-stream marker
  */
-public record PipelineFrame(int generation, int frameNumber, long timestampUs, Frame frame) {
+public record PipelineFrame(int generation, long sequence, int frameNumber, long timestampUs, Frame frame) {
 
-    public static PipelineFrame endOfStream(int generation) {
-        return new PipelineFrame(generation, -1, 0, null);
+    public static PipelineFrame endOfStream(int generation, long sequence) {
+        return new PipelineFrame(generation, sequence, -1, 0, null);
     }
 
     public boolean isEndOfStream() {

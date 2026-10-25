@@ -34,6 +34,7 @@ public class CommandLineController {
     private Integer displayId;
     private File videoFile;
     private String errorMessage;
+    private final List<FrameProcessorOption> frameProcessorOptions = new ArrayList<>();
     
     private static final Map<String, Character> OPTION_LONG_TO_SHORT = Map.of(
             "--help", 'h',
@@ -42,10 +43,13 @@ public class CommandLineController {
             "--monitor-1", '1',
             "--monitor-2", '2');
 
-    private final List<FrameProcessor> frameProcessors = new ArrayList<>();
     
+    public List<FrameProcessorOption> getFrameProcessorOptions() {
+        return Collections.unmodifiableList(frameProcessorOptions);
+    }
+
     public List<FrameProcessor> getFrameProcessors() {
-        return Collections.unmodifiableList(frameProcessors);
+        return FrameProcessorOption.createChain(frameProcessorOptions);
     }
 
     public CommandLineController(String[] args) {
@@ -109,7 +113,7 @@ public class CommandLineController {
             }
         } else {
         	 boolean otherOptionsGiven = audioRequested || maximiseRequested
-        	            || displayId != null || !frameProcessors.isEmpty();
+        	            || displayId != null || !frameProcessorOptions.isEmpty();
         	    if (!helpRequested || otherOptionsGiven) {
         	        errorMessage = "No video file specified.";
         	    }
@@ -122,7 +126,7 @@ public class CommandLineController {
             return;
         }
         FrameProcessorOption.fromLongFlag(arg).ifPresentOrElse(
-                option -> frameProcessors.add(option.create()),
+                option -> frameProcessorOptions.add(option),
                 () -> errorMessage = "Unknown option: " + arg);
     }
 
@@ -145,10 +149,11 @@ public class CommandLineController {
             case '1' -> setDisplayId(1);
             case '2' -> setDisplayId(2);
             default -> FrameProcessorOption.fromShortFlag(flag).ifPresentOrElse(
-                    option -> frameProcessors.add(option.create()),
+                    option -> frameProcessorOptions.add(option),
                     () -> errorMessage = "Unknown option: -" + flag);
         }
     }
+    
     private void setDisplayId(int displayId) {
         if (this.displayId != null && this.displayId != displayId) {
             errorMessage = "Only one display option can be used";

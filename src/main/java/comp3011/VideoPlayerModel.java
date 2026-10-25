@@ -42,7 +42,6 @@ public class VideoPlayerModel {
     private static final long FIVE_SECONDS_US = 5_000_000L;
     private static final long AUDIO_LEAD_NS = 30_000_000L;
 
-    private final List<FrameProcessor> frameProcessors;
     // Written by the decoder thread, read and cleared by the JavaFX thread.
     private final Queue<PendingAudio> pendingAudio = new ConcurrentLinkedQueue<>();
     private final BiConsumer<Integer, Integer> videoSizeChangedHandler;
@@ -50,6 +49,7 @@ public class VideoPlayerModel {
     private final Consumer<String> statusChangedHandler;
     private final BiConsumer<Boolean, Boolean> playbackStateChangedHandler;
     private final Consumer<Boolean> audioOutputStateChangedHandler;
+    private final List<FrameProcessorOption> frameProcessorOptions;
 
     // JavaFX calls handle() on every pulse of its event loop; we use it as the display heart beat.
     private final AnimationTimer playbackTimer = new AnimationTimer() {
@@ -83,7 +83,7 @@ public class VideoPlayerModel {
 
     public VideoPlayerModel(
             boolean audioEnabled,
-            List<FrameProcessor> frameProcessors,
+            List<FrameProcessorOption> frameProcessorOptions,
             BiConsumer<Integer, Integer> videoSizeChangedHandler,
             Consumer<Image> frameReadyHandler,
             Consumer<String> statusChangedHandler,
@@ -95,7 +95,7 @@ public class VideoPlayerModel {
         this.statusChangedHandler = statusChangedHandler;
         this.playbackStateChangedHandler = playbackStateChangedHandler;
         this.audioOutputStateChangedHandler = audioOutputStateChangedHandler;
-        this.frameProcessors = List.copyOf(frameProcessors);
+        this.frameProcessorOptions = List.copyOf(frameProcessorOptions);
     }
 
     public void play(File file) {
@@ -259,9 +259,10 @@ public class VideoPlayerModel {
         int frameDurationUs = videoFrameDurationUs;
 
         DecoderTask.Callbacks callbacks = new DecoderTask.Callbacks() {
+        	
             @Override
             public void firstImageFrame(Frame frame, int pixelFormat) throws Exception {
-                InfoVideo videoInfo = new InfoVideo(
+                pipeline.initialiseProcessors(new InfoVideo(
                         mediaName,
                         frames,
                         frame.imageWidth,
@@ -272,11 +273,9 @@ public class VideoPlayerModel {
                         rate,
                         intRate,
                         frameDurationUs,
-                        pixelFormat);
-                for (FrameProcessor processor : frameProcessors) {
-                    processor.initialise(videoInfo);
-                }
+                        pixelFormat));
             }
+            
 
             @Override
             public void audioDecoded(int generation, long timestampUs, Frame frame) {
@@ -291,7 +290,7 @@ public class VideoPlayerModel {
         pipeline = new FramePipeline(
                 grabber,
                 audioAvailable,
-                frameProcessors,
+                frameProcessorOptions,
                 frameConverter::convert,
                 callbacks,
                 error -> Platform.runLater(() -> {

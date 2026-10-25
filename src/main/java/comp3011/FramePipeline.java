@@ -1,5 +1,6 @@
 /*
- * Authors: Zixi Khoo A1925025
+ * Authors:
+ *  Zixi Khoo A1925025
  */
 package comp3011;
 
@@ -8,6 +9,7 @@ import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -17,67 +19,88 @@ import org.bytedeco.javacv.Frame;
 import javafx.scene.image.Image;
 
 /**
- * Owns the threads and queues of one playback session:
+ * Owns the threads and queues of one playback session, as a frame-parallel pool:
  *
  * <pre>
- * decoder -> [queue] -> effect 1 -> [queue] -> ... -> effect N -> [queue] -> converter -> [display queue]
+ * decoder -&gt; [queue] -&gt; worker 1..N (each runs a whole frame through every effect) -&gt; [display queue]
  * </pre>
  *
- * <p>The JavaFX thread is the only consumer of the display queue and never blocks on it
- * (peek/poll only). There are no locks anywhere: frames are handed between threads through
- * bounded BlockingQueues, which provide both safe publication and back-pressure, and the
- * pipeline is acyclic, so it cannot deadlock. Seeks are handled with a generation counter:
- * every stage discards frames whose generation is not the current one.</p>
+ * <p>Each worker has its own chain of processor instances, so no processor is ever touched by two
+ * threads, and a frame stays on one core for its whole journey instead of being handed between a
+ * thread per effect. Thread count is set by the number of cores rather than the number of effects.</p>
+ *
+ * <p>Workers finish out of order, so publishing is serialised by sequence number (see
+ * {@link FrameWorkerPool}), keeping playback linear in time. Seeks use a generation counter: every
+ * stage discards frames whose generation is not the current one.</p>
  */
 public class FramePipeline implements AutoCloseable {
-    private static final int STAGE_QUEUE_CAPACITY = 2;
+    private static final int INPUT_QUEUE_CAPACITY = 8;
     private static final int DISPLAY_QUEUE_CAPACITY = 16;
     private static final long JOIN_TIMEOUT_MS = 3_000;
 
     private final AtomicInteger generation = new AtomicInteger();
+    private final AtomicLong nextSequenceToPublish = new AtomicLong();
+    private final Object publishLock = new Object();
     private final List<BlockingQueue<?>> queues = new ArrayList<>();
     private final List<Thread> threads = new ArrayList<>();
     private final BlockingQueue<DisplayFrame> displayQueue = new ArrayBlockingQueue<>(DISPLAY_QUEUE_CAPACITY);
     private final FramePool framePool;
+    private final List<List<FrameProcessor>> chains = new ArrayList<>();
     private final DecoderTask decoder;
     private volatile boolean closing;
 
     public FramePipeline(
             FFmpegFrameGrabber grabber,
             boolean audioAvailable,
-            List<FrameProcessor> processors,
+            List<FrameProcessorOption> processorOptions,
             Function<Frame, Image> converter,
             DecoderTask.Callbacks callbacks,
             Consumer<Exception> errorHandler) {
-        // Errors raised while shutting down (interrupts etc.) are expected and not reported.
         Consumer<Exception> guardedErrorHandler = e -> {
             if (!closing) {
                 errorHandler.accept(e);
             }
         };
-        framePool = new FramePool(Math.max(16, processors.size() * STAGE_QUEUE_CAPACITY));
-        BlockingQueue<PipelineFrame> upstream = newStageQueue();
+
+        int workerCount = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
+        framePool = new FramePool(workerCount * 2 + INPUT_QUEUE_CAPACITY + DISPLAY_QUEUE_CAPACITY);
+
+        BlockingQueue<PipelineFrame> inputQueue = new ArrayBlockingQueue<>(INPUT_QUEUE_CAPACITY);
+        queues.add(inputQueue);
+        queues.add(displayQueue);
+
         decoder = new DecoderTask(
-                grabber, audioAvailable, generation.get(), upstream, framePool, callbacks, guardedErrorHandler);
+                grabber, audioAvailable, generation.get(), inputQueue, framePool, callbacks, guardedErrorHandler);
         addThread("decoder", decoder);
 
-        int index = 1;
-        for (FrameProcessor processor : processors) {
-            BlockingQueue<PipelineFrame> downstream = newStageQueue();
-            addThread("effect-" + index++ + "-" + processor.getClass().getSimpleName(),
-                    new ProcessorStage(processor, upstream, downstream, generation::get, guardedErrorHandler));
-            upstream = downstream;
+        for (int worker = 1; worker <= workerCount; worker++) {
+            List<FrameProcessor> chain = FrameProcessorOption.createChain(processorOptions);
+            chains.add(chain);
+            addThread("worker-" + worker, new FrameWorkerPool(
+                    chain,
+                    converter,
+                    inputQueue,
+                    displayQueue,
+                    framePool,
+                    generation::get,
+                    publishLock,
+                    nextSequenceToPublish,
+                    guardedErrorHandler));
         }
-
-        queues.add(displayQueue);
-        addThread("converter",
-        		 new ConverterStage(converter, upstream, displayQueue, framePool, generation::get, guardedErrorHandler));
     }
 
     public void start() {
         threads.forEach(Thread::start);
     }
-
+    
+    public void initialiseProcessors(InfoVideo videoInfo) throws Exception {
+        for (List<FrameProcessor> chain : chains) {
+            for (FrameProcessor processor : chain) {
+                processor.initialise(videoInfo);
+            }
+        }
+    }
+    
     public int currentGeneration() {
         return generation.get();
     }
@@ -92,13 +115,16 @@ public class FramePipeline implements AutoCloseable {
     }
 
     /**
-     * Moves playback to a new position. Order matters: bump the generation first (so anything still
-     * in flight is recognised as stale), then empty the queues, and only then ask the decoder to
-     * seek (so no frame from the new position can be thrown away by the clear).
+     * Moves playback to a new position. The sequence counter is reset and every waiting worker woken,
+     * so no worker is left waiting for a sequence number that the decoder will never issue again.
      */
     public void seek(long timestampUs) {
         int newGeneration = generation.incrementAndGet();
         queues.forEach(BlockingQueue::clear);
+        synchronized (publishLock) {
+            nextSequenceToPublish.set(0);
+            publishLock.notifyAll();
+        }
         decoder.requestSeek(newGeneration, timestampUs);
     }
 
@@ -118,16 +144,9 @@ public class FramePipeline implements AutoCloseable {
         framePool.clear();
     }
 
-    private BlockingQueue<PipelineFrame> newStageQueue() {
-        BlockingQueue<PipelineFrame> queue = new ArrayBlockingQueue<>(STAGE_QUEUE_CAPACITY);
-        queues.add(queue);
-        return queue;
-    }
-
     private void addThread(String name, Runnable task) {
         Thread thread = new Thread(task, name);
         thread.setDaemon(true); // never keep the JVM alive
-        thread.setPriority(Thread.MIN_PRIORITY);
         threads.add(thread);
     }
 }

@@ -29,6 +29,9 @@ public class FrameFlickerer extends FrameProcessor {
     private static final double FLICKER_PERCENTAGE_SD = 5.0;
 
     private static int nextInstanceIndex;
+    static void resetInstanceCounter() {
+        nextInstanceIndex = 0;
+    }
 
     private final int instanceIndex;
     private int mediaSeed;

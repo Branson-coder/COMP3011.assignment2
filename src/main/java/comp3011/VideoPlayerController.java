@@ -34,13 +34,13 @@ public class VideoPlayerController {
 
     public VideoPlayerController(
             boolean audioEnabled,
-            List<FrameProcessor> frameProcessors,
+            List<FrameProcessorOption> frameProcessorOptions,
             BiConsumer<Integer, Integer> videoSizeChangedHandler) {
         this.view = new VideoPlayerView();
         this.videoSizeChangedHandler = videoSizeChangedHandler;
         model = new VideoPlayerModel(
                 audioEnabled,
-                frameProcessors,
+                frameProcessorOptions,
                 this::onVideoSizeChanged,
                 this::onFrameReady,
                 this::onStatusChanged,

@@ -56,6 +56,9 @@ public class FrameMottler extends FrameProcessor {
     private static final int LARGE_FIELD_SALT = 0x4c415247;
 
     private static int nextInstanceIndex;
+    static void resetInstanceCounter() {
+        nextInstanceIndex = 0;
+    }
 
     private final int instanceIndex;
     private int mediaSeed;

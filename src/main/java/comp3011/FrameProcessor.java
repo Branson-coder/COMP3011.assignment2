@@ -53,6 +53,17 @@ public abstract class FrameProcessor {
         crc.update(bytes, 0, bytes.length);
         return (int) crc.getValue();
     }
+    // Each worker in the pool needs its own chain of processors, but processors seed themselves from a
+    // static instance counter. Resetting the counters before building each chain makes every chain
+    // identical, so a frame renders the same whichever worker handles it.
+    public static void resetInstanceCounters() {
+        FrameDuster.resetInstanceCounter();
+        FrameFlickerer.resetInstanceCounter();
+        FrameJitterer.resetInstanceCounter();
+        FrameMottler.resetInstanceCounter();
+        FramePepperer.resetInstanceCounter();
+        FrameScratcher.resetInstanceCounter();
+    }
 
     public abstract void process(Frame frame, InfoFrame info) throws Exception;
 }

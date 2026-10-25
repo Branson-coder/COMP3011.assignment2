@@ -55,10 +55,10 @@ class ProcessorStageTest {
     @Test
     void processesFramesInOrderAndForwardsEndMarker() throws Exception {
         Thread thread = startStage();
-        input.put(new PipelineFrame(1, 0, 0, new Frame()));
-        input.put(new PipelineFrame(1, 1, 1000, new Frame()));
-        input.put(new PipelineFrame(1, 2, 2000, new Frame()));
-        input.put(PipelineFrame.endOfStream(1));
+        input.put(new PipelineFrame(1, 0, 0, 0, new Frame()));
+        input.put(new PipelineFrame(1, 1, 1, 1000, new Frame()));
+        input.put(new PipelineFrame(1, 2, 2, 2000, new Frame()));
+        input.put(PipelineFrame.endOfStream(1, 3));
 
         assertEquals(0, next().frameNumber());
         assertEquals(1, next().frameNumber());
@@ -71,16 +71,15 @@ class ProcessorStageTest {
     @Test
     void dropsFramesFromStaleGenerations() throws Exception {
         Thread thread = startStage();
-        input.put(new PipelineFrame(0, 5, 0, new Frame())); // old generation
-        input.put(new PipelineFrame(1, 6, 0, new Frame()));
-        input.put(PipelineFrame.endOfStream(1));
+        input.put(new PipelineFrame(0, 0, 5, 0, new Frame())); // old generation
+        input.put(new PipelineFrame(1, 1, 6, 0, new Frame()));
+        input.put(PipelineFrame.endOfStream(1, 2));
 
         assertEquals(6, next().frameNumber());
         assertTrue(next().isEndOfStream());
         assertEquals(List.of(6), seen);
         stop(thread);
     }
-
     @Test
     void interruptStopsAStageBlockedOnEmptyInput() throws Exception {
         Thread thread = startStage();
