@@ -1,6 +1,6 @@
 /*
  * Authors:
- *   1. <your name and student number>
+ *   Zixi Khoo A1925025
  */
 package comp3011;
 
@@ -37,6 +37,7 @@ public class DecoderTask implements Runnable {
     private final FFmpegFrameGrabber grabber;
     private final boolean audioAvailable;
     private final BlockingQueue<PipelineFrame> output;
+    private final FramePool framePool;
     private final Callbacks callbacks;
     private final Consumer<Exception> errorHandler;
     private final BlockingQueue<SeekRequest> seekRequests = new LinkedBlockingQueue<>();
@@ -49,12 +50,14 @@ public class DecoderTask implements Runnable {
             boolean audioAvailable,
             int initialGeneration,
             BlockingQueue<PipelineFrame> output,
+            FramePool framePool,
             Callbacks callbacks,
             Consumer<Exception> errorHandler) {
         this.grabber = grabber;
         this.audioAvailable = audioAvailable;
         this.generation = initialGeneration;
         this.output = output;
+        this.framePool = framePool;
         this.callbacks = callbacks;
         this.errorHandler = errorHandler;
     }
@@ -88,7 +91,8 @@ public class DecoderTask implements Runnable {
                     callbacks.firstImageFrame(frame, grabber.getPixelFormat());
                     initialised = true;
                 }
-                output.put(new PipelineFrame(generation, grabber.getFrameNumber(), timestampUs, frame.clone()));
+                output.put(new PipelineFrame(
+                        generation, grabber.getFrameNumber(), timestampUs, framePool.copyOf(frame)));
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // normal shutdown

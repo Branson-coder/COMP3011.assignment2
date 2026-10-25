@@ -1,6 +1,5 @@
 /*
- * Authors:
- *   1. <your name and student number>
+ * Authors: Zixi Khoo A1925025
  */
 package comp3011;
 
@@ -32,13 +31,14 @@ import javafx.scene.image.Image;
  */
 public class FramePipeline implements AutoCloseable {
     private static final int STAGE_QUEUE_CAPACITY = 2;
-    private static final int DISPLAY_QUEUE_CAPACITY = 4;
+    private static final int DISPLAY_QUEUE_CAPACITY = 16;
     private static final long JOIN_TIMEOUT_MS = 3_000;
 
     private final AtomicInteger generation = new AtomicInteger();
     private final List<BlockingQueue<?>> queues = new ArrayList<>();
     private final List<Thread> threads = new ArrayList<>();
     private final BlockingQueue<DisplayFrame> displayQueue = new ArrayBlockingQueue<>(DISPLAY_QUEUE_CAPACITY);
+    private final FramePool framePool;
     private final DecoderTask decoder;
     private volatile boolean closing;
 
@@ -55,9 +55,10 @@ public class FramePipeline implements AutoCloseable {
                 errorHandler.accept(e);
             }
         };
-
+        framePool = new FramePool(Math.max(16, processors.size() * STAGE_QUEUE_CAPACITY));
         BlockingQueue<PipelineFrame> upstream = newStageQueue();
-        decoder = new DecoderTask(grabber, audioAvailable, generation.get(), upstream, callbacks, guardedErrorHandler);
+        decoder = new DecoderTask(
+                grabber, audioAvailable, generation.get(), upstream, framePool, callbacks, guardedErrorHandler);
         addThread("decoder", decoder);
 
         int index = 1;
@@ -70,7 +71,7 @@ public class FramePipeline implements AutoCloseable {
 
         queues.add(displayQueue);
         addThread("converter",
-                new ConverterStage(converter, upstream, displayQueue, generation::get, guardedErrorHandler));
+        		 new ConverterStage(converter, upstream, displayQueue, framePool, generation::get, guardedErrorHandler));
     }
 
     public void start() {
@@ -114,6 +115,7 @@ public class FramePipeline implements AutoCloseable {
             }
         }
         queues.forEach(BlockingQueue::clear);
+        framePool.clear();
     }
 
     private BlockingQueue<PipelineFrame> newStageQueue() {
@@ -125,7 +127,7 @@ public class FramePipeline implements AutoCloseable {
     private void addThread(String name, Runnable task) {
         Thread thread = new Thread(task, name);
         thread.setDaemon(true); // never keep the JVM alive
-        thread.setPriority(Thread.NORM_PRIORITY - 1);
+        thread.setPriority(Thread.MIN_PRIORITY);
         threads.add(thread);
     }
 }
