@@ -11,6 +11,7 @@
 package comp3011;
 
 import java.nio.ByteBuffer;
+import java.util.stream.IntStream;
 
 import org.bytedeco.javacv.Frame;
 
@@ -51,24 +52,24 @@ public class FrameBlackAndWhiter extends FrameProcessor {
     }
 
     private void convertFrame(ByteBuffer pixels) {
-        int height = videoInfo.imageHeight();
+        IntStream.range(0, videoInfo.imageHeight()).parallel().forEach(y -> convertRow(pixels, y));
+    }
+
+    private void convertRow(ByteBuffer pixels, int y) {
         int width = videoInfo.imageWidth();
         int channels = videoInfo.imageChannels();
-        int stride = videoInfo.imageStride();
+        int rowStart = y * videoInfo.imageStride();
 
-        for (int y = 0; y < height; y++) {
-            int rowStart = y * stride;
-            for (int x = 0; x < width; x++) {
-                int base = rowStart + x * channels;
-                // JavaCV supplies these decoded frames in BGR byte order.
-                int b = Byte.toUnsignedInt(pixels.get(base));
-                int g = Byte.toUnsignedInt(pixels.get(base + 1));
-                int r = Byte.toUnsignedInt(pixels.get(base + 2));
-                byte luminance = (byte) ((54 * r + 183 * g + 19 * b) / 256);
+        for (int x = 0; x < width; x++) {
+            int base = rowStart + x * channels;
+            // JavaCV supplies these decoded frames in BGR byte order.
+            int b = Byte.toUnsignedInt(pixels.get(base));
+            int g = Byte.toUnsignedInt(pixels.get(base + 1));
+            int r = Byte.toUnsignedInt(pixels.get(base + 2));
+            byte luminance = (byte) ((54 * r + 183 * g + 19 * b) / 256);
 
-                for (int channel = 0; channel < channels; channel++) {
-                    pixels.put(base + channel, luminance);
-                }
+            for (int channel = 0; channel < channels; channel++) {
+                pixels.put(base + channel, luminance);
             }
         }
     }

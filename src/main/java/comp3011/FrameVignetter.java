@@ -11,6 +11,7 @@
 package comp3011;
 
 import java.nio.ByteBuffer;
+import java.util.stream.IntStream;
 
 import org.bytedeco.javacv.Frame;
 
@@ -116,29 +117,27 @@ public class FrameVignetter extends FrameProcessor {
     }
 
     private void vignetteFrame(ByteBuffer pixels) {
-        int height = videoInfo.imageHeight();
+        IntStream.range(0, videoInfo.imageHeight()).parallel().forEach(y -> vignetteRow(pixels, y));
+    }
+
+    private void vignetteRow(ByteBuffer pixels, int y) {
         int width = videoInfo.imageWidth();
         int channels = videoInfo.imageChannels();
-        int stride = videoInfo.imageStride();
+        int rowStart = y * videoInfo.imageStride();
+        byte[] yLookup = yLookups[y];
 
-        for (int y = 0; y < height; y++) {
-            int rowStart = y * stride;
-            byte[] yLookup = yLookups[y];
+        for (int x = 0; x < width; x++) {
+            int base = rowStart + x * channels;
+            byte[] xLookup = xLookups[x];
 
-            for (int x = 0; x < width; x++) {
-                int base = rowStart + x * channels;
-                byte[] xLookup = xLookups[x];
-
-                for (int channel = 0; channel < channels; channel++) {
-                    int index = base + channel;
-                    int value = Byte.toUnsignedInt(pixels.get(index));
-                    value = Byte.toUnsignedInt(xLookup[value]);
-                    pixels.put(index, yLookup[value]);
-                }
+            for (int channel = 0; channel < channels; channel++) {
+                int index = base + channel;
+                int value = Byte.toUnsignedInt(pixels.get(index));
+                value = Byte.toUnsignedInt(xLookup[value]);
+                pixels.put(index, yLookup[value]);
             }
         }
     }
-
     private int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(value, max));
     }

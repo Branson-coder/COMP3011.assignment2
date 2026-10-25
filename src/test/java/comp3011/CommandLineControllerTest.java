@@ -140,4 +140,16 @@ class CommandLineControllerTest {
         assertTrue(help.indexOf("--bleed-frames") < help.indexOf("--pepper-frames"));
         assertTrue(help.contains("Frame processors are applied in command-line order and may be repeated."));
     }
+    
+    @Test
+    void helpWithOtherOptionsButNoVideoIsAnError() {
+        PrintStream original = System.out;
+        System.setOut(new PrintStream(new ByteArrayOutputStream()));
+        try {
+            assertEquals(1, new CommandLineController(new String[] { "--number-frames", "-h" }).getExitCode());
+            assertEquals(0, new CommandLineController(new String[] { "-h" }).getExitCode());
+        } finally {
+            System.setOut(original);
+        }
+    }
 }

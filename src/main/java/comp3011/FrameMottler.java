@@ -11,6 +11,7 @@
 package comp3011;
 
 import java.nio.ByteBuffer;
+import java.util.stream.IntStream;
 import java.util.Random;
 
 import org.bytedeco.javacv.Frame;
@@ -274,46 +275,45 @@ public class FrameMottler extends FrameProcessor {
             double[] brightnessField,
             double[] stainField,
             double damageMaskBlend) {
+        int blockRows = (videoInfo.imageHeight() + EFFECT_BLOCK_SIZE - 1) / EFFECT_BLOCK_SIZE;
+        IntStream.range(0, blockRows).parallel().forEach(blockRow -> mottleBlockRow(
+                pixels, blockRow * EFFECT_BLOCK_SIZE, brightnessField, stainField, damageMaskBlend));
+    }
+
+    private void mottleBlockRow(
+            ByteBuffer pixels,
+            int blockY,
+            double[] brightnessField,
+            double[] stainField,
+            double damageMaskBlend) {
         int height = videoInfo.imageHeight();
         int width = videoInfo.imageWidth();
         int channels = videoInfo.imageChannels();
         int stride = videoInfo.imageStride();
+        int[] scaleIndices = new int[3]; // blue, green, red; private to this row task
+        int blockYEnd = Math.min(blockY + EFFECT_BLOCK_SIZE, height);
+        int sampleY = (blockY + blockYEnd - 1) / 2;
 
-        for (int blockY = 0; blockY < height; blockY += EFFECT_BLOCK_SIZE) {
-            int blockYEnd = Math.min(blockY + EFFECT_BLOCK_SIZE, height);
-            int sampleY = (blockY + blockYEnd - 1) / 2;
+        for (int blockX = 0; blockX < width; blockX += EFFECT_BLOCK_SIZE) {
+            int blockXEnd = Math.min(blockX + EFFECT_BLOCK_SIZE, width);
+            int sampleX = (blockX + blockXEnd - 1) / 2;
 
-            for (int blockX = 0; blockX < width; blockX += EFFECT_BLOCK_SIZE) {
-                int blockXEnd = Math.min(blockX + EFFECT_BLOCK_SIZE, width);
-                int sampleX = (blockX + blockXEnd - 1) / 2;
-
-                if (!prepareScaleIndicesForBlock(
-                        sampleX,
-                        sampleY,
-                        brightnessField,
-                        stainField,
-                        damageMaskBlend)) {
-                    continue;
-                }
-
-                applyMottleBlock(
-                        pixels,
-                        blockX,
-                        blockXEnd,
-                        blockY,
-                        blockYEnd,
-                        channels,
-                        stride);
+            if (!prepareScaleIndicesForBlock(
+                    sampleX, sampleY, brightnessField, stainField, damageMaskBlend, scaleIndices)) {
+                continue;
             }
+
+            applyMottleBlock(pixels, blockX, blockXEnd, blockY, blockYEnd, channels, stride, scaleIndices);
         }
     }
-
+    
     private boolean prepareScaleIndicesForBlock(
             int x,
             int y,
             double[] brightnessField,
             double[] stainField,
-            double damageMaskBlend) {
+            double damageMaskBlend,
+            int[] scaleIndices) {
         double damageStrength = sampleDamageMask(x, y, damageMaskBlend);
         if (damageStrength <= 0.0) {
             return false;
@@ -322,8 +322,55 @@ public class FrameMottler extends FrameProcessor {
         double brightness = smoothstep(sampleField(brightnessField, x, y));
         double stain = smoothstep(sampleField(stainField, x, y));
 
-        setBlockScaleIndices(brightness, stain, damageStrength);
+        setBlockScaleIndices(brightness, stain, damageStrength, scaleIndices);
         return true;
+    }
+    
+    private void setBlockScaleIndices(double brightness, double stain, double damageStrength, int[] scaleIndices) {
+        double brightnessScale;
+        if (brightness < 0.5) {
+            brightnessScale = 1.0 - (0.5 - brightness) * 2.0 * MAX_DARKEN_PERCENTAGE / 100.0;
+        } else {
+            brightnessScale = 1.0 + (brightness - 0.5) * 2.0 * MAX_LIGHTEN_PERCENTAGE / 100.0;
+        }
+        brightnessScale = 1.0 + (brightnessScale - 1.0) * damageStrength;
+
+        double stainStrength = Math.max(0.0, (stain - STAIN_THRESHOLD) / (1.0 - STAIN_THRESHOLD));
+        stainStrength = smoothstep(stainStrength) * damageStrength;
+
+        double blueScale = brightnessScale * (1.0 - stainStrength * BLUE_STAIN_LOSS_PERCENTAGE / 100.0);
+        double greenScale = brightnessScale * (1.0 + stainStrength * GREEN_STAIN_BOOST_PERCENTAGE / 100.0);
+        double redScale = brightnessScale * (1.0 + stainStrength * RED_STAIN_BOOST_PERCENTAGE / 100.0);
+
+        scaleIndices[0] = scaleIndex(blueScale);
+        scaleIndices[1] = scaleIndex(greenScale);
+        scaleIndices[2] = scaleIndex(redScale);
+    }
+
+    private void applyMottleBlock(
+            ByteBuffer pixels,
+            int blockX,
+            int blockXEnd,
+            int blockY,
+            int blockYEnd,
+            int channels,
+            int stride,
+            int[] scaleIndices) {
+        byte[] blueLookup = scaleLookups[scaleIndices[0]];
+        byte[] greenLookup = scaleLookups[scaleIndices[1]];
+        byte[] redLookup = scaleLookups[scaleIndices[2]];
+
+        for (int y = blockY; y < blockYEnd; y++) {
+            int rowStart = y * stride;
+            for (int x = blockX; x < blockXEnd; x++) {
+                int base = rowStart + x * channels;
+
+                // JavaCV supplies these decoded frames in BGR byte order.
+                pixels.put(base, blueLookup[Byte.toUnsignedInt(pixels.get(base))]);
+                pixels.put(base + 1, greenLookup[Byte.toUnsignedInt(pixels.get(base + 1))]);
+                pixels.put(base + 2, redLookup[Byte.toUnsignedInt(pixels.get(base + 2))]);
+            }
+        }
     }
 
     private double sampleDamageMask(int x, int y, double damageMaskBlend) {
@@ -368,31 +415,7 @@ public class FrameMottler extends FrameProcessor {
         blockRedScaleIndex = scaleIndex(redScale);
     }
 
-    private void applyMottleBlock(
-            ByteBuffer pixels,
-            int blockX,
-            int blockXEnd,
-            int blockY,
-            int blockYEnd,
-            int channels,
-            int stride) {
-        byte[] blueLookup = scaleLookups[blockBlueScaleIndex];
-        byte[] greenLookup = scaleLookups[blockGreenScaleIndex];
-        byte[] redLookup = scaleLookups[blockRedScaleIndex];
-
-        for (int y = blockY; y < blockYEnd; y++) {
-            int rowStart = y * stride;
-            for (int x = blockX; x < blockXEnd; x++) {
-                int base = rowStart + x * channels;
-
-                // JavaCV supplies these decoded frames in BGR byte order.
-                pixels.put(base, blueLookup[Byte.toUnsignedInt(pixels.get(base))]);
-                pixels.put(base + 1, greenLookup[Byte.toUnsignedInt(pixels.get(base + 1))]);
-                pixels.put(base + 2, redLookup[Byte.toUnsignedInt(pixels.get(base + 2))]);
-            }
-        }
-    }
-
+   
     private int scaleIndex(double scale) {
         double blend = (scale - minimumScale) / (maximumScale - minimumScale);
         return clamp((int) Math.round(blend * (SCALE_LOOKUP_SIZE - 1)), 0, SCALE_LOOKUP_SIZE - 1);

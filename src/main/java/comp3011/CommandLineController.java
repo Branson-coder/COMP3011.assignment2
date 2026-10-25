@@ -108,9 +108,11 @@ public class CommandLineController {
                 videoFile = null;
             }
         } else {
-            if (!helpRequested) {
-                errorMessage = "No video file specified.";
-            }
+        	 boolean otherOptionsGiven = audioRequested || maximiseRequested
+        	            || displayId != null || !frameProcessors.isEmpty();
+        	    if (!helpRequested || otherOptionsGiven) {
+        	        errorMessage = "No video file specified.";
+        	    }
         }
     }
     private void parseLongOption(String arg) {
