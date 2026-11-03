@@ -49,7 +49,11 @@ public class CommandLineController {
     }
 
     public List<FrameProcessor> getFrameProcessors() {
-        return FrameProcessorOption.createChain(frameProcessorOptions);
+        return FrameProcessorOption.createChain(frameProcessorOptions, new SubtitleState());
+    }
+    
+    public boolean isSubtitlesRequested() {
+        return frameProcessorOptions.contains(FrameProcessorOption.SUBTITLE);
     }
 
     public CommandLineController(String[] args) {

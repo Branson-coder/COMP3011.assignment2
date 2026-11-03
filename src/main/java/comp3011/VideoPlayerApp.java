@@ -42,10 +42,12 @@ public class VideoPlayerApp extends Application {
     @Override
     public void start(Stage stage) {
         this.stage = stage;
-
+        SubtitleState subtitleState = new SubtitleState();
+        subtitleState.setEnabled(commandLineController.isSubtitlesRequested());
         controller = new VideoPlayerController(
                 commandLineController.isAudioRequested(),
                 commandLineController.getFrameProcessorOptions(),
+                subtitleState,
                 this::setVideoSize);
 
         Scene scene = new Scene(controller.getView().getRoot());

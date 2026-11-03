@@ -41,7 +41,7 @@ public class VideoPlayerModel {
     private static final long NO_SEEK_REQUEST = -1; // Sentinel value used when no seek position is active.
     private static final long FIVE_SECONDS_US = 5_000_000L;
     private static final long AUDIO_LEAD_NS = 30_000_000L;
-    private static final int PREBUFFER_FRAMES = 340;
+    private static final int PREBUFFER_FRAMES = 48;
 
     // Written by the decoder thread, read and cleared by the JavaFX thread.
     private final Queue<PendingAudio> pendingAudio = new ConcurrentLinkedQueue<>();
@@ -51,6 +51,7 @@ public class VideoPlayerModel {
     private final BiConsumer<Boolean, Boolean> playbackStateChangedHandler;
     private final Consumer<Boolean> audioOutputStateChangedHandler;
     private final List<FrameProcessorOption> frameProcessorOptions;
+    private final SubtitleState subtitleState;
 
     // JavaFX calls handle() on every pulse of its event loop; we use it as the display heart beat.
     private final AnimationTimer playbackTimer = new AnimationTimer() {
@@ -85,6 +86,7 @@ public class VideoPlayerModel {
     public VideoPlayerModel(
             boolean audioEnabled,
             List<FrameProcessorOption> frameProcessorOptions,
+            SubtitleState subtitleState,
             BiConsumer<Integer, Integer> videoSizeChangedHandler,
             Consumer<Image> frameReadyHandler,
             Consumer<String> statusChangedHandler,
@@ -97,6 +99,7 @@ public class VideoPlayerModel {
         this.playbackStateChangedHandler = playbackStateChangedHandler;
         this.audioOutputStateChangedHandler = audioOutputStateChangedHandler;
         this.frameProcessorOptions = List.copyOf(frameProcessorOptions);
+        this.subtitleState = subtitleState;
     }
 
     public void play(File file) {
@@ -150,7 +153,15 @@ public class VideoPlayerModel {
         flushAudioOutput();
         notifyAudioOutputStateChanged();
     }
+    
+    public boolean isSubtitlesEnabled() {
+        return subtitleState.isEnabled();
+    }
 
+    public void toggleSubtitles() {
+        subtitleState.toggle();
+    }
+    
     public boolean isAudioOutputEnabled() {
         return audioOutputEnabled;
     }
@@ -292,6 +303,7 @@ public class VideoPlayerModel {
                 grabber,
                 audioAvailable,
                 frameProcessorOptions,
+                subtitleState,
                 frameConverter::convert,
                 callbacks,
                 error -> Platform.runLater(() -> {

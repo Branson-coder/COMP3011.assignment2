@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.ArrayList;
+import java.util.function.Function;
 
 /**
  * Registry of the command-line selectable frame processors. Each constant holds its
@@ -29,29 +30,42 @@ public enum FrameProcessorOption {
     JITTER('j', "jitter-frames", "Randomly displace frames by a few pixels", FrameJitterer::new),
     MOTTLE('m', "mottle-frames", "Add cloudy emulsion mottling", FrameMottler::new),
     BLEED('b', "bleed-frames", "Bleed light into frames", FrameBleeder::new),
-    PEPPER('p', "pepper-frames", "Pepper frames with dark spots/blotches", FramePepperer::new);
+    PEPPER('p', "pepper-frames", "Pepper frames with dark spots/blotches", FramePepperer::new),
+    SUBTITLE('S', "subtitle-frames", "Add speech-to-text subtitles to frames", null, SubtitleFrameProcessor::new);
 
     private final char shortFlag;
     private final String longFlag;
     private final String description;
     private final Supplier<FrameProcessor> factory;
+    private final Function<SubtitleState, FrameProcessor> subtitleFactory;
 
     FrameProcessorOption(char shortFlag, String longFlag, String description, Supplier<FrameProcessor> factory) {
+        this(shortFlag, longFlag, description, factory, null);
+    }
+
+    FrameProcessorOption(
+            char shortFlag,
+            String longFlag,
+            String description,
+            Supplier<FrameProcessor> factory,
+            Function<SubtitleState, FrameProcessor> subtitleFactory) {
         this.shortFlag = shortFlag;
         this.longFlag = longFlag;
         this.description = description;
         this.factory = factory;
+        this.subtitleFactory = subtitleFactory;
     }
 
-    public FrameProcessor create() {
-        return factory.get();
+    public FrameProcessor create(SubtitleState subtitleState) {
+        return subtitleFactory != null ? subtitleFactory.apply(subtitleState) : factory.get();
     }
+
     /** Builds one independent chain of processors for the given options, in order. */
-    public static List<FrameProcessor> createChain(List<FrameProcessorOption> options) {
+    public static List<FrameProcessor> createChain(List<FrameProcessorOption> options, SubtitleState subtitleState) {
         FrameProcessor.resetInstanceCounters();
         List<FrameProcessor> chain = new ArrayList<>();
         for (FrameProcessorOption option : options) {
-            chain.add(option.create());
+            chain.add(option.create(subtitleState));
         }
         return chain;
     }

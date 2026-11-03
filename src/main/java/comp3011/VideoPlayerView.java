@@ -11,6 +11,7 @@
 package comp3011;
 
 import javafx.geometry.Insets;
+
 import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -30,7 +31,7 @@ import javafx.scene.shape.Line;
 import javafx.scene.shape.Polygon;
 import javafx.scene.shape.SVGPath;
 import javafx.scene.shape.StrokeLineCap;
-
+import javafx.scene.shape.Rectangle;
 /**
  * The view part of the video player model-view-controller architecture.
  *
@@ -57,6 +58,7 @@ public class VideoPlayerView {
     private final Button forwardFiveButton;
     private final Button stopButton;
     private final Button audioButton;
+    private final Button subtitleButton;
 
     public VideoPlayerView() {
         imageView.setPreserveRatio(true);
@@ -75,6 +77,7 @@ public class VideoPlayerView {
         forwardFiveButton = iconButton(createLoopIcon(true, "5"));
         stopButton = iconButton(createStopIcon());
         audioButton = iconButton(createAudioIcon(false));
+        subtitleButton = iconButton(createSubtitleIcon(false));
         setPlaybackControlsDisabled(true);
 
         HBox controls = new HBox(
@@ -85,6 +88,7 @@ public class VideoPlayerView {
                 forwardFiveButton,
                 stopButton,
                 audioButton,
+                subtitleButton,
                 statusLabel);
 
         controls.setPadding(new Insets(10));
@@ -158,6 +162,7 @@ public class VideoPlayerView {
         forwardFiveButton.setDisable(disabled);
         stopButton.setDisable(disabled);
         audioButton.setDisable(disabled);
+        subtitleButton.setDisable(disabled);
     }
 
     // There are a bunch of tooltip handling methods starting from here. We want to use tooltips so that people with
@@ -169,6 +174,7 @@ public class VideoPlayerView {
         setButtonTooltip(forwardFiveButton, "[RIGHT]");
         setButtonTooltip(stopButton, "[ESC]");
         setButtonTooltip(audioButton, "[A]");
+        setButtonTooltip(subtitleButton, "[S]");
     }
 
     private void setButtonTooltip(Button button, String text) {
@@ -351,6 +357,48 @@ public class VideoPlayerView {
 
     // Helper to draw a cross over the speaker indicating that we're muted.
     private Line audioLine(double startX, double startY, double endX, double endY) {
+        Line line = new Line(startX, startY, endX, endY);
+        line.setStroke(Color.BLACK);
+        line.setStrokeWidth(2.0);
+        line.setStrokeLineCap(StrokeLineCap.ROUND);
+        return line;
+    }
+    
+    public Button getSubtitleButton() {
+        return subtitleButton;
+    }
+
+    public void showSubtitlesEnabled(boolean subtitlesEnabled) {
+        subtitleButton.setGraphic(createSubtitleIcon(subtitlesEnabled));
+    }
+    // A captions box: a rounded rectangle with two text lines inside, crossed out when subtitles are off.
+    private Node createSubtitleIcon(boolean subtitlesEnabled) {
+        Pane pane = new Pane();
+        pane.setMinSize(ICON_SIZE, ICON_SIZE);
+        pane.setPrefSize(ICON_SIZE, ICON_SIZE);
+        pane.setMaxSize(ICON_SIZE, ICON_SIZE);
+
+        Rectangle box = new Rectangle(4, 7, 20, 14);
+        box.setArcWidth(4);
+        box.setArcHeight(4);
+        box.setFill(null);
+        box.setStroke(Color.BLACK);
+        box.setStrokeWidth(2.0);
+
+        Line topLine = subtitleLine(8, 13, 20, 13);
+        Line bottomLine = subtitleLine(8, 17, 16, 17);
+        pane.getChildren().addAll(box, topLine, bottomLine);
+
+        if (!subtitlesEnabled) {
+            Line slash = subtitleLine(5, 23, 23, 5);
+            slash.setStrokeWidth(2.5);
+            pane.getChildren().add(slash);
+        }
+
+        return pane;
+    }
+
+    private Line subtitleLine(double startX, double startY, double endX, double endY) {
         Line line = new Line(startX, startY, endX, endY);
         line.setStroke(Color.BLACK);
         line.setStrokeWidth(2.0);

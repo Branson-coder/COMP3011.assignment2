@@ -31,21 +31,25 @@ public class VideoPlayerController {
     private final VideoPlayerModel model;
     private final VideoPlayerView view;
     private final BiConsumer<Integer, Integer> videoSizeChangedHandler;
+    
 
     public VideoPlayerController(
             boolean audioEnabled,
             List<FrameProcessorOption> frameProcessorOptions,
+            SubtitleState subtitleState,
             BiConsumer<Integer, Integer> videoSizeChangedHandler) {
         this.view = new VideoPlayerView();
         this.videoSizeChangedHandler = videoSizeChangedHandler;
         model = new VideoPlayerModel(
                 audioEnabled,
                 frameProcessorOptions,
+                subtitleState,
                 this::onVideoSizeChanged,
                 this::onFrameReady,
                 this::onStatusChanged,
                 this::onPlaybackStateChanged,
                 this::onAudioOutputStateChanged);
+        		
 
         view.getStartOverButton().setOnAction(_ -> startOver());
         view.getBackFiveButton().setOnAction(_ -> backFiveSeconds());
@@ -53,6 +57,8 @@ public class VideoPlayerController {
         view.getForwardFiveButton().setOnAction(_ -> forwardFiveSeconds());
         view.getStopButton().setOnAction(_ -> stopAndExit());
         view.getAudioButton().setOnAction(_ -> toggleAudioOutput());
+        view.getSubtitleButton().setOnAction(_ -> toggleSubtitles());
+        view.showSubtitlesEnabled(model.isSubtitlesEnabled());
         view.showAudioEnabled(model.isAudioOutputEnabled());
     }
     
@@ -76,9 +82,17 @@ public class VideoPlayerController {
             } else if (event.getCode() == KeyCode.A) {
                 toggleAudioOutput();
                 event.consume();
+            } else if (event.getCode() == KeyCode.S) {
+                toggleSubtitles();
+                event.consume();
             }
-        });
+         });
     }
+        
+     private void toggleSubtitles() {
+            model.toggleSubtitles();
+            view.showSubtitlesEnabled(model.isSubtitlesEnabled());
+        }
 
     public VideoPlayerView getView() {
         return view;

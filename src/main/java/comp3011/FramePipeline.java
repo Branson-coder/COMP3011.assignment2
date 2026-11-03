@@ -35,7 +35,7 @@ import javafx.scene.image.Image;
  */
 public class FramePipeline implements AutoCloseable {
     private static final int INPUT_QUEUE_CAPACITY = 8;
-    private static final int DISPLAY_QUEUE_CAPACITY = 400;
+    private static final int DISPLAY_QUEUE_CAPACITY = 64;
     private static final long JOIN_TIMEOUT_MS = 3_000;
 
     private final AtomicInteger generation = new AtomicInteger();
@@ -53,6 +53,7 @@ public class FramePipeline implements AutoCloseable {
             FFmpegFrameGrabber grabber,
             boolean audioAvailable,
             List<FrameProcessorOption> processorOptions,
+            SubtitleState subtitleState,
             Function<Frame, Image> converter,
             DecoderTask.Callbacks callbacks,
             Consumer<Exception> errorHandler) {
@@ -74,7 +75,7 @@ public class FramePipeline implements AutoCloseable {
         addThread("decoder", decoder);
 
         for (int worker = 1; worker <= workerCount; worker++) {
-            List<FrameProcessor> chain = FrameProcessorOption.createChain(processorOptions);
+            List<FrameProcessor> chain = FrameProcessorOption.createChain(processorOptions, subtitleState);
             chains.add(chain);
             addThread("worker-" + worker, new FrameWorkerPool(
                     chain,
