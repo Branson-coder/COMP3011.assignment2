@@ -4,7 +4,7 @@
  * 
  * Authors:
  *   1. Simon Ratcliffe, in collaboration with GPT-5.6 Terra
- *   2. <student name and student number insert here upon modification>
+ *   2. <Zixi Khoo a1925025>
  *
  * Copyright 2026 Simon Ratcliffe
  */
@@ -44,6 +44,7 @@ public class VideoPlayerApp extends Application {
         this.stage = stage;
         SubtitleState subtitleState = new SubtitleState();
         subtitleState.setEnabled(commandLineController.isSubtitlesRequested());
+        subtitleState.setCurrentText("This is a test subtitle line, rendered onto the frame.");
         controller = new VideoPlayerController(
                 commandLineController.isAudioRequested(),
                 commandLineController.getFrameProcessorOptions(),
