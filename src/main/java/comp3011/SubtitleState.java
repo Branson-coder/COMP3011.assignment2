@@ -6,6 +6,7 @@ package comp3011;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.List;
 
 /**
  * Subtitle state shared by the GUI and every worker's copy of {@link SubtitleFrameProcessor}.
@@ -17,6 +18,30 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class SubtitleState {
     private final AtomicBoolean enabled = new AtomicBoolean();
     private final AtomicReference<String> currentText = new AtomicReference<>("");
+    private final AtomicReference<List<SubtitleSegment>> segments = new AtomicReference<>(List.of());
+
+    /** Replaces the whole transcript at once, so readers never see a half-updated track. */
+    public void setSegments(List<SubtitleSegment> newSegments) {
+        segments.set(newSegments == null ? List.of() : List.copyOf(newSegments));
+        setCurrentText("");
+    }
+
+    public boolean hasSegments() {
+        return !segments.get().isEmpty();
+    }
+
+    /** The segment covering this playback time, or null. Called from the JavaFX thread. */
+    public String textAt(long timestampUs) {
+        for (SubtitleSegment segment : segments.get()) {
+            if (segment.covers(timestampUs)) {
+                return segment.text();
+            }
+            if (segment.startUs() > timestampUs) {
+                break; // segments are in time order, so nothing later can match
+            }
+        }
+        return "";
+    }
 
     public void setEnabled(boolean value) {
         enabled.set(value);

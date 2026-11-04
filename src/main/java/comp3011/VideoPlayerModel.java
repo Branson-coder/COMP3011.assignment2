@@ -52,6 +52,7 @@ public class VideoPlayerModel {
     private final Consumer<Boolean> audioOutputStateChangedHandler;
     private final List<FrameProcessorOption> frameProcessorOptions;
     private final SubtitleState subtitleState;
+    private final SubtitleService subtitleService = new SubtitleService();
 
     // JavaFX calls handle() on every pulse of its event loop; we use it as the display heart beat.
     private final AnimationTimer playbackTimer = new AnimationTimer() {
@@ -104,6 +105,11 @@ public class VideoPlayerModel {
 
     public void play(File file) {
         videoFile = file;
+        subtitleState.setSegments(List.of());
+        subtitleService.fetchSegments(file).thenAccept(segments -> {
+            segments.forEach(s -> System.out.println("  " + s.startUs() + " to " + s.endUs() + ": " + s.text()));
+            Platform.runLater(() -> subtitleState.setSegments(segments));
+        });
         videoDurationUs = NO_SEEK_REQUEST;
         videoFrameDurationUs = 0;
         startPlayback(0, false, NO_SEEK_REQUEST);
@@ -393,6 +399,15 @@ public class VideoPlayerModel {
     private void showFrame(DisplayFrame frame, long targetTimeNs) {
         long relativeTimestampUs = Math.max(0, frame.timestampUs() - firstTimestampUs);
         currentTimestampUs = logicalPlaybackBaseUs + relativeTimestampUs;
+        // The whole transcript is already in hand, so the right subtitle for any playback position
+        // is a simple lookup. Seeking therefore needs no special handling at all.
+        if (subtitleState.hasSegments()) {
+            String subtitleText = subtitleState.textAt(frame.timestampUs());
+            if (intFrameRate > 0 && frame.frameNumber() % intFrameRate == 0) {
+                System.out.println("at " + frame.timestampUs() + "us subtitle=[" + subtitleText + "]");
+            }
+            subtitleState.setCurrentText(subtitleText);
+        }
         relativeSeekBaseUs = NO_SEEK_REQUEST;
 
         // Dump some logging to the console once per second so that real time performance can be monitored.

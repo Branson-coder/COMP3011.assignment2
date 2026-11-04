@@ -44,7 +44,6 @@ public class VideoPlayerApp extends Application {
         this.stage = stage;
         SubtitleState subtitleState = new SubtitleState();
         subtitleState.setEnabled(commandLineController.isSubtitlesRequested());
-        subtitleState.setCurrentText("This is a test subtitle line, rendered onto the frame.");
         controller = new VideoPlayerController(
                 commandLineController.isAudioRequested(),
                 commandLineController.getFrameProcessorOptions(),
